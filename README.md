@@ -11,6 +11,7 @@
 ## Lab 2 编译器认知实验
 
 ## Lab 3 词法分析实验
+[Antlr-v4 C grammar](https://github.com/antlr/grammars-v4/blob/master/c/C.g4)
 >
 >
 
