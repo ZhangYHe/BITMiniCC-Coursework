@@ -24,7 +24,7 @@
     - [Lab 4 过程及步骤](#lab-4-过程及步骤)
       - [Lab 4 C语言文法子集描述](#lab-4-c语言文法子集描述)
       - [Lab 4 程序推导过程](#lab-4-程序推导过程)
-  - [Lab 5 语法分析实验作业](#lab-5-语法分析实验作业)
+  - [Lab 5 语法分析实验](#lab-5-语法分析实验)
     - [Lab 5 实验内容](#lab-5-实验内容)
     - [Lab 5 实验过程及步骤](#lab-5-实验过程及步骤)
       - [Lab 5 扩充C语言文法子集](#lab-5-扩充c语言文法子集)
@@ -34,6 +34,23 @@
       - [Lab 5 if-else语句](#lab-5-if-else语句)
       - [Lab 5 for循环语句](#lab-5-for循环语句)
       - [Lab 5 声明语句](#lab-5-声明语句)
+  - [Lab 6 语义分析实验](#lab-6-语义分析实验)
+    - [Lab 6 实验内容](#lab-6-实验内容)
+    - [Lab 6 实验过程及步骤](#lab-6-实验过程及步骤)
+      - [Lab 6 框架设计](#lab-6-框架设计)
+      - [Lab 6 遍历语法树](#lab-6-遍历语法树)
+      - [Lab 6 ES01：变量使用前是否进行了定义](#lab-6-es01变量使用前是否进行了定义)
+      - [Lab 6 ES02：变量是否存在重复定义](#lab-6-es02变量是否存在重复定义)
+      - [Lab 6 ES03：break语句是否在循环语句中使用](#lab-6-es03break语句是否在循环语句中使用)
+      - [Lab 6 ES04：函数调用的参数个数和类型是否匹配](#lab-6-es04函数调用的参数个数和类型是否匹配)
+      - [Lab 6 ES07：goto的目标是否存在](#lab-6-es07goto的目标是否存在)
+      - [Lab 6 ES08：函数是否以return结束](#lab-6-es08函数是否以return结束)
+      - [Lab 6 ES05、ES06](#lab-6-es05es06)
+  - [Lab 7 中间代码生成实验](#lab-7-中间代码生成实验)
+    - [Lab 7 实验内容](#lab-7-实验内容)
+  - [Lab 8 目标代码生成实验](#lab-8-目标代码生成实验)
+    - [Lab 8 实验内容](#lab-8-实验内容)
+
 
 ## Lab 1 语言认知实验
 
@@ -571,7 +588,7 @@ int main()
 <program> -> int main () { printf ( “hello world\n” ) ; return 0 ; }
 ```
 
-## Lab 5 语法分析实验作业
+## Lab 5 语法分析实验
 
 ### Lab 5 实验内容
 
@@ -929,3 +946,273 @@ public ASTDeclaration decl(){
   return dc;
  }
 ```
+
+## Lab 6 语义分析实验
+
+### Lab 6 实验内容
+
+语义分析阶段的工作为基于语法分析获得的分析树构建符号表，并进行语义检查。如果存在非法的结果，请将结果报告给用户其中语义检查的内容主要包括：
+
+- 变量使用前是否进行了定义；
+- 变量是否存在重复定义；
+- break 语句是否在循环语句中使用；
+- 函数调用的参数个数和类型是否匹配；
+- 函数使用前是否进行了定义或者声明；
+- 运算符两边的操作数的类型是否相容；
+- 数组访问是否越界；
+- goto 的目标是否存在；
+- 函数是否以return结束;
+- ...
+
+本次语义检查的前（1）-（3）为要求完成内容，而其余为可选内容。在本次实验中，我完成了（1）-（5）和（8）（9）。（6）由于框架内预处理器将左移运算符拆分为"<""<"，并且我自己写的前几次实验代码没有包含左右移运算符，无法对框架内测试用例进行正确处理，因此没有实现（6）。
+
+### Lab 6 实验过程及步骤
+
+#### Lab 6 框架设计
+
+本次实验需要根据AST语法树进行语义分析。结合课上所学知识，需要将AST转换为CST，建立符号表，并遍历语法树。在此期间进行错误检查。
+
+符号表的设计如图所示。通过一个TotalTable的列表管理各个符号表，列表中的第一项为全局符号表，其余元素为函数符号表。每个函数都有一个符号表。全局符号存储在GlobalTable中，从函数符号表到全局符号表有一个引用。
+
+符号表通过ArrayList数据结构实现。符号表中存储的数据有以下内容：
+
+- 变量或函数名称
+- 数据类型
+- 语句类型
+- 作用域范围
+- 函数的参数类型
+- 内部嵌套的作用域符号表
+
+#### Lab 6 遍历语法树
+
+在遍历AST语法树的过程中进行错误检测。从根节点出发，使用DFS的方式递归遍历所有节点。根据不同的AST节点重写visit()函数，不同的节点进入不同的函数中处理。在遍历语法树的过程中，对于定义语句需要分为函数定义和变量定义两种情况进行处理。对于函数定义需要为其添加符号表，并在全局符号表中添加对应的函数名和函数符号表。
+
+在visit的过程中，需要根据AST的结构进行类型转换，从而适配不同的visit()函数。例如在判断goto目标是否存在时，需要将ASTNode类型的变量转换为ASTLabeledStatement类型，这样才能在public void visit(ASTLabeledStatement labeledStat) {}函数中处理。
+
+遍历语法树的代码如下所示。
+
+```
+//DFS遍历语法树
+for (ASTNode item:program.items){
+ String class_name = "AST"+ item.getType();
+ //函数定义
+ if(class_name.equals("ASTFunctionDefine")){
+  //类型转换为ASTFunctionDefine，便于匹配visit
+  ASTFunctionDefine fdf = (ASTFunctionDefine) item;
+  MySemanticVisitor visitor = new MySemanticVisitor();
+  visitor.global_table = total_table;
+  //递归调用visit
+  fdf.accept(visitor);
+  //为每个函数添加符号表
+  total_table.add(visitor.cur_table);
+  //添加函数名
+  total_table.get(0).add(visitor.cur_table.get(0));
+ }
+ //变量声明
+ else if(class_name.equals("ASTDeclaration")){
+  ASTDeclaration dc = (ASTDeclaration) item;
+  MySemanticVisitor dc_visitor = new MySemanticVisitor();
+  dc_visitor.global_table=total_table;
+  //递归调用visit
+  item.accept(dc_visitor);
+  //添加声明
+  total_table.get(0).addAll(dc_visitor.cur_table);
+ }
+}
+```
+
+#### Lab 6 ES01：变量使用前是否进行了定义
+
+对于每一个标识符，分别在当前函数符号表、全局符号表中搜索。若均没有找到对应的变量定义则出现错误。对于函数是否定义的判断同理。
+
+检查变量使用前是否进行了定义的代码如下所示。
+
+```
+ //返回0时出现错误
+public int check_notdefine(ASTIdentifier id){
+ int flag=0;
+ //在当前函数符号表搜索
+ for(int i=0;i<cur_table.size();i++){
+  if(cur_table.get(i).Name.equals(id.value)){
+   flag=1;
+   break;
+  }
+ }
+ if(flag==0) {
+  //在全局符号表搜索
+  for (int i = 0; i < global_table.get(0).size(); i++) {
+   if (global_table.get(0).get(i).Name.equals(id.value)) {
+    flag = 1;
+    break;
+   }
+  }
+ }
+ return flag;
+}
+```
+
+#### Lab 6 ES02：变量是否存在重复定义
+
+在遍历语法树的过程中，若节点类型为ASTFunctionDefine，此时判断函数是否重定义。遍历全局符号表，查找是否有相同名称的函数定义记录。由于C语言不支持函数内重定义，因此无需遍历其他函数的符号表。该部分代码如下所示。
+
+```
+//返回0时函数重复定义
+public int check_funcdef(SymbolTable item){
+ int flag=1;
+ 
+ //遍历全局符号表
+ //查找函数名相同的函数定义
+ for(int i=1;i<global_table.size();i++){
+  if((global_table.get(i).get(0).Name.equals(item.Name))&&(global_table.get(i).get(0).Kind.equals(item.Kind))){
+   flag=0;
+  }
+ }
+ return flag;
+}
+```
+
+遍历过语法树后，遍历全局符号表以及所有的函数符号表，查找是否存在重复定义的符号。关键代码如下所示。
+
+```
+//查找当前位置之后有无重复声明
+for(int j=0;j<tmp_table.size();j++){
+ for(int k=j+1;k<tmp_table.size();k++){
+  if((tmp_table.get(j).Name.equals(tmp_table.get(k).Name))&&(tmp_table.get(j).Kind.equals(tmp_table.get(k).Kind))&&(tmp_table.get(k).Kind.equals("VariableDeclarator")||tmp_table.get(k).Kind.equals("FunctionDeclarator"))){
+   System.out.println("ES02 >> Declaration:"+tmp_table.get(k).Name+" has been declarated.");
+  }
+ }
+}
+```
+
+#### Lab 6 ES03：break语句是否在循环语句中使用
+
+使用变量is\_in\_loop记录当前语句是否位于循环中。在进入循环语句时将该变量设置为1，退出循环语句时将其重置为0。
+
+```
+//循环语句
+@Override
+public void visit(ASTIterationStatement iterationStat) throws Exception {
+ this.is_in_loop = 1;
+ String tmp_type = iterationStat.stat.getType();
+ if(tmp_type.equals("CompoundStatement")){
+  ASTCompoundStatement cstmt = (ASTCompoundStatement) iterationStat.stat;
+  cstmt.accept(this);
+ }
+ //递归结束，退出循环
+ this.is_in_loop = 0;
+}
+```
+
+若遇到BreakStatement语句时，is\_in\_loop变量值为1，这代表break语句在循环语句中使用，向用户提示并报错。
+
+```
+else if(tmp_type.equals("BreakStatement")){
+ //break语句不在循环中
+ if(this.is_in_loop!=1){
+  System.out.println("ES03 >> BreakStatement:must be in a LoopStatement.");
+ }
+}
+```
+
+#### Lab 6 ES04：函数调用的参数个数和类型是否匹配
+
+对于函数调用的ASTFunctionCall节点，首先检查函数名是否定义。其次检查函数参数个数是否一致，若参数个数不一致则报错。最后检查参数类型是否与符号表中记录的参数类型一致，若不一致则报错。
+
+检查函数调用的参数个数和类型是否匹配的关键代码如下所示。
+
+```
+//没有参数，无需检验参数是否一致
+if(global_table.get(0).size()<1){
+ return;
+}
+//参数个数不匹配
+if(funcCall.argList.size()!=global_table.get(0).get(func_def_ord).params.size()){
+ System.out.println("ES04 >> FunctionCall:"+cur_table.get(0).Name+"'s param num is not matched.");
+}else{
+ for(int i=0;i<funcCall.argList.size();i++){
+  if(global_table.get(0).get(func_def_ord).params.get(i).equals("int")){
+   if(funcCall.argList.get(i).getType().equals("IntegerConstant")){
+    continue;
+   }
+   //参数类型不匹配
+   else {
+    System.out.println("ES04 >> FunctionCall:"+cur_table.get(0).Name+"'s param type is not matched.");
+   }
+  }
+ }
+}
+```
+
+#### Lab 6 ES07：goto的目标是否存在
+
+在遍历语法树的过程中，遇到ASTLabeledStatement类型的节点时，代表这是一个goto的标号，在符号表中记录该标号，并将标号的类型设置为“label”，随后调用参数为ASTIdentifier类型的visit()函数处理标号。若遇到ASTGotoStatement类型的goto语句，在符号表中搜索标号是否存在，若不存在则报错。
+
+检查goto的目标是否存在的关键代码如下所示。
+
+```
+@Override
+public void visit(ASTLabeledStatement labeledStat) throws Exception {
+ //从table_cur开始为label
+ int table_cur = cur_table.size();
+ labeledStat.label.accept(this);
+ //更新label的Kind
+ cur_table.get(table_cur).Kind = "label";
+ //label后的语句
+ ASTStatement stmt = (ASTStatement) labeledStat.stat;
+ stmt.accept(this);
+}
+
+//goto语句
+@Override
+public void visit(ASTGotoStatement gotoStat) throws Exception {
+ ASTIdentifier id = (ASTIdentifier) gotoStat.label;
+ //检查goto标识符是否定义
+ int flag = check_notdefine(id);
+ if(flag==0){
+  System.out.println("ES07 >> Label: "+id.value+" is not defined.");
+ }
+}
+```
+
+#### Lab 6 ES08：函数是否以return结束
+
+使用is\_return标识符记录当前函数是否有return语句。。在ASTReturnStatement类型的节点中，将is\_return标识符设置为1，这代表函数中出现了1个return语句。对于函数定义语句的ASTFunctionDefine类型的节点，在进入其visit()函数时将is\_return标识符设置为0，即将离开该visit()函数时若is\_return标识符仍为0，代表函数缺少return语句，此时报错提醒用户；若is\_return标识符为1，代表函数以return结束。
+
+判断函数是否以return结束的部分代码如下所示。
+
+```
+functionDefine.body.accept(this);
+if(is_return==0){
+ System.out.println("ES08 >> Function:"+this.cur_table.get(0).Name+" must have a return in the end.");
+}
+
+//return语句
+@Override
+public void visit(ASTReturnStatement returnStat) throws Exception {
+ //有return，更新is_return标志
+ is_return=1;
+}
+```
+
+#### Lab 6 ES05、ES06
+
+本次实验我实现了ES01-ES04、ES07和ES08。对于ES05运算符两边的操作数的类型是否相容这一错误，由于测试用例中存在"<<"运算符，但框架内预处理器将左右移运算符拆分为"<"，并且我自己写的前几次实验代码没有包含左右移运算符，无法对框架内测试用例进行正确处理，因此没有实现ES05。若后续有机会，我将继续完成对ES05、ES06错误的检测。
+
+```
+int main()
+{
+ int a = 2;
+ double b = 3.5;
+ int res = a<<b;
+ return 0;
+}
+```
+
+
+## Lab 7 中间代码生成实验
+
+### Lab 7 实验内容
+
+## Lab 8 目标代码生成实验
+
+### Lab 8 实验内容
