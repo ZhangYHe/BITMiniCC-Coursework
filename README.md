@@ -48,9 +48,38 @@
       - [Lab 6 ES05、ES06](#lab-6-es05es06)
   - [Lab 7 中间代码生成实验](#lab-7-中间代码生成实验)
     - [Lab 7 实验内容](#lab-7-实验内容)
+    - [Lab 7 实验过程及步骤](#lab-7-实验过程及步骤)
+      - [Lab 7 框架设计](#lab-7-框架设计)
+      - [Lab 7 遍历语法树](#lab-7-遍历语法树)
+      - [Lab 7 数组声明](#lab-7-数组声明)
+      - [Lab 7 函数声明](#lab-7-函数声明)
+      - [Lab 7 二元表达式](#lab-7-二元表达式)
+      - [Lab 7 循环语句](#lab-7-循环语句)
+      - [Lab 7 条件语句](#lab-7-条件语句)
+      - [Lab 7 后缀表达式](#lab-7-后缀表达式)
+      - [Lab 7 goto语句](#lab-7-goto语句)
   - [Lab 8 目标代码生成实验](#lab-8-目标代码生成实验)
     - [Lab 8 实验内容](#lab-8-实验内容)
-
+    - [Lab 8 实验过程及步骤](#lab-8-实验过程及步骤)
+      - [Lab 8 框架设计](#lab-8-框架设计)
+      - [Lab 8 对中间代码生成模块的改进](#lab-8-对中间代码生成模块的改进)
+        - [Lab 8 循环与选择语句](#lab-8-循环与选择语句)
+        - [Lab 8 数组引用](#lab-8-数组引用)
+        - [Lab 8 模块输出](#lab-8-模块输出)
+        - [Lab 8 二元表达式](#lab-8-二元表达式)
+        - [Lab 8 函数调用](#lab-8-函数调用)
+        - [Lab 8 break语句](#lab-8-break语句)
+      - [Lab 8 生成data段](#lab-8-生成data段)
+      - [Lab 8 寄存器分配](#lab-8-寄存器分配)
+      - [Lab 8 比较运算](#lab-8-比较运算)
+      - [Lab 8 相等比较](#lab-8-相等比较)
+      - [Lab 8 条件跳转](#lab-8-条件跳转)
+      - [Lab 8 函数调用](#lab-8-函数调用-1)
+      - [Lab 8 返回语句](#lab-8-返回语句)
+      - [Lab 8 二元运算](#lab-8-二元运算)
+      - [Lab 8 自增自减运算](#lab-8-自增自减运算)
+      - [Lab 8 赋值运算](#lab-8-赋值运算)
+      - [Lab 8 数组访问](#lab-8-数组访问)
 
 ## Lab 1 语言认知实验
 
@@ -1208,11 +1237,662 @@ int main()
 }
 ```
 
-
 ## Lab 7 中间代码生成实验
 
 ### Lab 7 实验内容
 
+以自行完成的语义分析阶段的抽象语法树为输入，或者以BIT\_MiniCC的语义分析阶段的抽象语法树为输入，针对不同的语句类型，将其翻译为中间代码序列。例如下面的输入语句：
+
+```
+int main() {
+ int a, b, c;
+ a = 0;
+ b = 1;
+ c = 2;
+ c = a + b + (c + 3);
+ return 0;
+}
+```
+
+### Lab 7 实验过程及步骤
+
+#### Lab 7 框架设计
+
+本次实验需要根据语义分析阶段的抽象语法树作为输入，生成对应的中间代码。和Lab 6语义分析的操作过程相似，生成全局符号表global\_table与函数符号表cur\_table。其中全局符号表存储函数信息与全局变量信息，函数符号表存储不同函数的信息。符号表通过ArrayList数据结构实现。符号表的结构和语义分析中的一致，符号表中存储的数据有以下内容：
+
+- 变量或函数名称
+- 数据类型
+- 语句类型
+- 作用域范围
+- 函数的参数类型
+- 内部嵌套的作用域符号表
+
+使用DFS的方式递归遍历语法树。根据不同的AST节点重写visit()函数,不同的节点进入不同的函数中处理。本次实验的中间代码选择四元式的表示方法，操作数和返回值的结构直接使用AST节点。使用CursorValue记录当前代码的行号。
+
+与语义分析实验中不同的是，在中间代码生成的过程中需要对数组说明进行翻译。使用教材上的数组内情向量表记录数组信息，内情向量包括以下内容：
+
+- 数组名称
+- 数据类型
+- 数组维数
+- 数组每一维的上下限
+
+#### Lab 7 遍历语法树
+
+与语义分析实验中的遍历语法树方法相似。从根节点出发，使用DFS的方式递归遍历所有节点。根据不同的AST节点重写visit()函数，不同的节点进入不同的函数中处理。在遍历语法树的过程中，对于定义语句需要分为函数定义和变量定义两种情况进行处理。对于函数定义需要为其添加符号表，并在全局符号表中添加对应的函数名和函数符号表。在visit的过程中，需要根据AST的结构进行类型转换，从而适配不同的visit()函数。许多visit()函数例如public void visit(ASTExpressionStatement expressionStat)等均与语义分析中一致。
+
+#### Lab 7 数组声明
+
+对于数组声明语句，使用内情向量表进行翻译。每个数组对应表中的一个内情向量。初始时数组的内情向量维度为0。根据json格式的数组定义的特点，递归进行修改。若当前为ASTArrayDeclarator类型，则此时表示内层还有嵌套定义的数组，继续访问下一个维度的数组，并修改内情向量的维度+1。若当前为ASTVariableDeclarator类型，则此时已经访问到数组定义的最后一个维度，修改name并将维度+1。根据数组声明时的下标，修改内情向量表中该维度的上下限。
+
+数组声明部分的代码如下所示。
+
+```
+//数组声明
+@Override
+public void visit(ASTArrayDeclarator arrayDeclarator) throws Exception {
+ //初始时数组内情向量表中维度为0
+ ArrayDopeVector vector = new ArrayDopeVector();
+ vector.dim = 0;
+ 
+ //已经访问到数组最后一层
+ if(arrayDeclarator.declarator instanceof ASTVariableDeclarator){
+  this.array_vec_table.add(vector);
+  ASTVariableDeclarator vd = (ASTVariableDeclarator) arrayDeclarator.declarator;
+  this.array_vec_table.get(array_vec_table.size()-1).name = vd.identifier.value;
+  this.array_vec_table.get(array_vec_table.size()-1).dim += 1;
+  visit((ASTVariableDeclarator)arrayDeclarator.declarator);
+ }
+ //内层还有嵌套定义的数组
+ else if(arrayDeclarator.declarator instanceof ASTArrayDeclarator){
+  //继续访问下一层
+  visit((ASTArrayDeclarator)arrayDeclarator.declarator);
+  this.array_vec_table.get(array_vec_table.size()-1).dim+=1;
+ }
+ //数组下标
+ if(arrayDeclarator.expr instanceof ASTIntegerConstant){
+  ASTIntegerConstant ic = (ASTIntegerConstant) arrayDeclarator.expr;
+  //设置数组维数上下限
+  ArrayRange ul = new ArrayRange();
+  ul.lower = 0;
+  ul.upper = ic.value-1;
+  array_vec_table.get(array_vec_table.size()-1).bound.add(ul);
+ }
+}
+```
+
+#### Lab 7 函数声明
+
+对于函数声明语句，遍历函数参数列表。若参数列表不为空，则将函数参数信息添加到函数符号表中，便于后续处理与判断。
+
+函数声明部分的关键代码如下所示。
+
+```
+//遍历参数列表
+for(int i=0;i<functionDeclarator.params.size();i++){
+ functionDeclarator.params.get(i).accept(this);
+}
+//参数列表不为空
+if(cur_table.size()>1){
+ //更新参数类型
+ for(int i=1;i<cur_table.size();i++){
+  cur_table.get(0).params.add(cur_table.get(i).Type);
+ }
+}
+```
+
+#### Lab 7 二元表达式
+
+对于二元表达式语句，首先判断运算符的类型。共分为三大类，分别是“=”赋值表达式，“+-*/\%”等算数运算表达式，"< > ==“等逻辑运算表达式。
+
+对于赋值操作，首先获取被赋值对象的res，根据等号右侧对象的类型分别处理。若等号右侧为二元表达式，则需要单独处理，将其整合成一个四元式。例如赋值语句a = b + c，需要生成四元式(=,b,c,a),而不是生成两个四元式 tmp1 = b + c和a = tmp1。
+
+对于算术运算表达式和逻辑运算表达式，需要将结果存储到中间变量中，生成相应的四元式。
+
+二元表达式部分的关键代码如下所示。
+
+```
+if (op.equals("=")) {
+ // 赋值操作
+ // 获取被赋值的对象res
+ visit(binaryExpression.expr1);
+ res = map.get(binaryExpression.expr1);
+ // 判断源操作数类型, 为了避免出现a = b + c; 生成两个四元式：tmp1 = b + c; a = tmp1;的情况。也可以用别的方法解决
+ if (binaryExpression.expr2 instanceof ASTIdentifier) {
+  opnd1 = binaryExpression.expr2;
+ } else if (binaryExpression.expr2 instanceof ASTIntegerConstant) {
+  opnd1 = binaryExpression.expr2;
+ } else if (binaryExpression.expr2 instanceof ASTBinaryExpression) {
+  ASTBinaryExpression value = (ASTBinaryExpression) binaryExpression.expr2;
+  op = value.op.value;
+  visit(value.expr1);
+  opnd1 = map.get(value.expr1);
+  visit(value.expr2);
+  opnd2 = map.get(value.expr2);
+ } else if(binaryExpression.expr2 instanceof ASTUnaryExpression) {
+  ASTUnaryExpression ue = (ASTUnaryExpression)binaryExpression.expr2;
+  visit(ue);
+  opnd1 = new TemporaryValue(tmpId);
+ } else {
+  // else ...
+ }
+}
+```
+
+#### Lab 7 循环语句
+
+循环语句按照教材中的方式进行翻译。其中init、cond、step分别为循环的初值表达式、终值和步长表达式；S为循环体的语句序列。翻译后的代码结构如下所示。
+
+```
+init.code
+cond.code         L1
+测试cond.code
+(jt, , ,L2)
+(jf, , ,L3)
+step.code         L4
+(j, , ,L1)
+S.code            L2
+(j, , ,L4)
+      L3
+          
+```
+
+在init后，cond前添加跳转标号L1，便于循环体结束后跳转回来进行下一次循环。在step前添加跳转标号L4，便于循环体结束后进行更新步长的操作。循环语句的关键代码如下所示。
+
+```
+//初始化
+for(int i=0;i<iterationStat.init.size();i++){
+ visit(iterationStat.init.get(i));
+}
+//init后cond前，添加跳转标号
+Integer L1 = cursor;
+//循环条件
+for(int i=0;i<iterationStat.cond.size();i++){
+ visit(iterationStat.cond.get(i));
+}
+
+res = new CursorValue(cursor+3+iterationStat.step.size());
+Quat quat1 = new Quat(cursor++,"Jt",res,opnd1,opnd2);
+quats.add(quat1);
+
+//循环
+if(iterationStat.stat instanceof ASTCompoundStatement){
+ ASTCompoundStatement cs = (ASTCompoundStatement)iterationStat.stat;
+ res = new CursorValue(cursor+3+iterationStat.step.size()+cs.blockItems.size());
+}else{
+ res = new CursorValue(cursor+4+iterationStat.step.size());
+}
+
+Quat quat2 = new Quat(cursor++,"Jf",res,opnd1,opnd2);
+quats.add(quat2);
+
+//step前添加标号
+Integer L4 = cursor;
+for(int i=0;i<iterationStat.step.size();i++){
+ visit(iterationStat.step.get(i));
+}
+res = new CursorValue(L1);
+Quat quat3 = new Quat(cursor++,"J",res,opnd1,opnd2);
+quats.add(quat3);
+
+visit(iterationStat.stat);
+res = new CursorValue(L4);
+Quat quat4 = new Quat(cursor++,"J",res,opnd1,opnd2);
+quats.add(quat4);
+```
+
+#### Lab 7 条件语句
+
+条件语句按照教材中的方式进行翻译。首先判断条件表达式的类型，将cond转换为对应类型的数据。为if和else语句添加相应的跳转四元式。最后通过visit()函数分别转入相应的then语句块和else语句块生成四元式。
+
+条件语句的关键代码如下所示。
+
+```
+//选择语句
+@Override
+public void visit(ASTSelectionStatement selectionStat) throws Exception {
+ ASTNode res = null;
+ ASTNode opnd1 = null;
+ ASTNode opnd2 = null;
+ for(int i=0;i<selectionStat.cond.size();i++){
+  //条件是一个字符
+  if(selectionStat.cond.get(i).getType().equals("Identifier")){
+   visit((ASTIdentifier)selectionStat.cond.get(i));
+  }else if(selectionStat.cond.get(i) instanceof ASTBinaryExpression){
+   visit((ASTBinaryExpression)selectionStat.cond.get(i));
+  }
+ }
+ //if执行语句
+ res = new CursorValue(cursor+2);
+ Quat quat1 = new Quat(cursor++,"Jt",res,opnd1,opnd2);
+ quats.add(quat1);
+ 
+ //else执行语句
+ res = new CursorValue(cursor+2);
+ Quat quat2 = new Quat(cursor++,"J",res,opnd1,opnd2);
+ quats.add(quat2);
+ visit(selectionStat.then);
+ visit(selectionStat.otherwise);
+}
+```
+
+#### Lab 7 后缀表达式
+
+对于形如i++的后缀表达式，opnd1和res都设置为ASTpostfixExpression.expr，opnd2设置为null。
+
+后缀表达式的关键代码如下所示。
+
+```
+if (postfixExpression.expr instanceof ASTIdentifier) {
+ opnd1 =postfixExpression.expr;
+} else if (postfixExpression.expr instanceof ASTIntegerConstant) {
+ opnd1 = postfixExpression.expr;
+}  else {
+ // else ...
+}
+res = opnd1;
+```
+
+#### Lab 7 goto语句
+
+对于ASTLabeledStatement类型的标号，在符号表中记录信息，包括名称、类型、作用域位置等。
+
+goto语句标号的关键代码如下所示。
+
+```
+@Override
+public void visit(ASTLabeledStatement labeledStat) throws Exception {
+ //从table_cur开始为label
+ int table_cur = cur_table.size();
+ labeledStat.label.accept(this);
+ SymbolTable item = new SymbolTable();
+ //变量或函数名
+ item.Name=labeledStat.label.value;
+ //作用域起始位置
+ item.Scope_entry = cursor;
+ item.Kind="label";
+ cur_table.add(item);
+```
+
+对于ASTGotoStatement类型的goto语句，在符号表中查询有无相同的标号。成功找到则记录label的cursor，生成对应的四元式。
+
+goto语句的关键代码如下所示。
+
+```
+for(int i=0;i<cur_table.size();i++) {
+ if(cur_table.get(i).Name.equals(gotoStat.label.value)) {
+  //记录标号cursor
+  Integer goto_label = cur_table.get(i).Scope_entry;
+  res = new CursorValue(goto_label);;
+  Quat quat = new Quat(cursor++,"J",res,opnd1,opnd2);
+  quats.add(quat);
+  break;
+ }
+```
+
 ## Lab 8 目标代码生成实验
 
 ### Lab 8 实验内容
+
+基于BIT-MiniCC 构建目标代码生成模块，该模块能够基于中间代码选择合适的目标指令，进行寄存器分配，并生成相应平台汇编代码。
+
+如果生成的是MIPS或者RISC-V 汇编，则要求汇编代码能够在BIT-MiniCC集成的 MIPS 或者RISC-V 模拟器中运行。需要注意的是，config.xml 的最后一个阶段“ncgen ”的"skip”属性配置为“false”,"target" 属性设置为“mips”、"x86"或者"riscv"中的一个。
+
+如果生成的是X86汇编，则要求使用X86汇编器生成exe文件并运行。
+
+本次实验我选择生成MIPS汇编，通过了0\_BubbleSort.c、1\_Fibonacci.c、2\_Prime.c、3\_PerfectNumber.c、5\_YangHuiTriangle.c这五个测试用例。
+
+### Lab 8 实验过程及步骤
+
+#### Lab 8 框架设计
+
+本次实验我选择生成MIPS汇编。基于Lab 7 中间代码生成实验所生成的四元式，选择合适的目标指令，进行寄存器分配，最终生成汇编代码。
+
+本次实验和中间代码生成部分紧密结合，需要根据符号表进行寄存器分配，生成data段等。因此我修改了BIT-MiniCC框架，将中间代码生成阶段的全局符号表作为函数参数传入目标代码生成模块。遍历符号表，生成.data段的字符串，为变量分配寄存器。由于跳转语句的四元式的标号和跳转行号没有明确对应关系，因此需要在目标代码生成的过程中遍历所有四元式，记录跳转标号和行号的对应关系，便于后续生成汇编的跳转语句。
+
+全局符号表global\_table存储函数信息与全局变量信息，符号表通过ArrayList数据结构实现。符号表的结构和语义分析中的一致，符号表中存储的数据有以下内容：
+
+- 变量或函数名称
+- 数据类型
+- 语句类型
+- 作用域范围
+- 函数的参数类型
+- 内部嵌套的作用域符号表
+
+对于加减乘除、自增自减等运算，根据运算符的类型生成相应的汇编语句。对于数组赋值、数组引用的运算，在data段定义数组，使用"la"指令加载地址，计算数组元素的地址或取出元素的值。对于函数调用的四元式，根据符号表中函数参数信息，将参数压入栈中。
+
+使用堆栈数据结构管理临时变量、中间计算结果等信息。生成汇编语句后，将存储计算结果的寄存器压入栈内，后续使用时只需从栈中弹出即可。对于函数调用四元式，将参数压入栈中，使用时出栈并存入子函数参数寄存器中，实现函数调用。
+
+#### Lab 8 对中间代码生成模块的改进
+
+##### Lab 8 循环与选择语句
+
+对于循环语句，在循环语句四元式的最后生成\_endloop标识符。使用endloop\_count变量计算循环序号。在上一次实验中使用cursor+3+iterationStat.step.size()+cs.blockItems.size()的方式计算条件不满足时跳转到的位置。但由于数组引用、数组赋值会多产生几行四元式，因此这样的计算方式在本次实验中失效。使用标识符标记循环结束位置，若条件不满足则跳转至本层循环的\_endloop标识符。
+
+```
+String endloop = "_endloop"+(endloop_count-2);
+Quat quat_endloop = new Quat(cursor++,endloop);
+quats.add(quat_endloop);
+```
+
+为了满足嵌套跳转的要求，对于选择语句，在当前层次的if-else结尾处设置endif标号。使用endif\_count变量维护endif序号。在进入visit((ASTSelectionStatement)statement)前将endif\_flag设置为true，从而为每个嵌套的if设置endif标号。
+
+```
+if(endif_flag){
+ String endif = "_endif"+(endif_count-2);
+ Quat quat_endif = new Quat(cursor++,endif);
+ quats.add(quat_endif);
+ endif_flag = false;
+ opnd1 = null;
+ opnd2 = null;
+ res = new ASTIdentifier();
+ ((ASTIdentifier) res).value = "endif"+(endif_count-1);
+ Quat quat_jumpif = new Quat(cursor++,"J",res,opnd1,opnd2);
+ quats.add(quat_jumpif);
+ 
+}else{
+ String endif = "_endif"+(endif_count-1);
+ Quat quat_endif = new Quat(cursor++,endif);
+ quats.add(quat_endif);
+}
+```
+
+##### Lab 8 数组引用
+
+使用Lab 7的数组内情向量表记录数组信息，内情向量包括以下内容：
+
+- 数组名称
+- 数据类型
+- 数组维数
+- 数组每一维的上下限
+
+对于多维数组，ASTArrayAccess类型的节点存在嵌套定义。和数组引用的处理方式类似，若ASTArrayAccess.expr为ASTArrayAccess类型，则为多维数组；否则已经递归到数组标识符。
+
+使用教材中的方式计算数组元素地址，根据数组维数计算不变量C。
+
+```
+int sumc = 1, tnum = 1;
+LinkedList c = new LinkedList();
+
+for(int i=limit.size()-1;i>0;i--) {
+ tnum = tnum * (int)limit.get(i).upper;
+ c.addFirst(tnum);
+ sumc += tnum;
+}
+```
+
+使用不同的符号区分数组元素引用和数组元素赋值。对于数组元素引用的四元式，符号为"=[]";数组元素赋值符号为"[]="。
+
+```
+ASTIntegerConstant d = new ASTIntegerConstant(sumc,-1);
+ASTIntegerConstant d0 = new ASTIntegerConstant(0,-1); ControlLabel("0"), null);
+Quat quat0 = new Quat(cursor++,"=", t2, d0, null);
+quats.add(quat0);
+
+for(int i=0;i<limit.size()-1;i++) {
+ ASTIntegerConstant dd= new ASTIntegerConstant((Integer)c.get(i),-1);
+ Quat quat1 = new Quat(cursor++,"*",t1, (ASTNode)index.get(i),dd);
+ quats.add(quat1);
+ Quat quat2 = new Quat(cursor++,"+",t2, t2, t1);
+ quats.add(quat2);
+}
+Quat quat2 = new Quat(cursor++,"+",t2, t2, (ASTNode)index.get(index.size()-1));
+quats.add(quat2);
+ASTNode t3 = new TemporaryValue(++tmpId);
+Quat quat3 = new Quat(cursor++,"=[]",t3, t2, expr);
+if(assarr == true)
+tmparrquat = quat3;
+quats.add(quat3);
+map.put(arrayAccess, t3);
+```
+
+##### Lab 8 模块输出
+
+本次实验需要根据符号表进行寄存器分配，生成data段等。因此我修改了BIT-MiniCC框架，将中间代码生成阶段的全局符号表作为函数参数传入目标代码生成模块。在符号表中存储变量信息、函数信息、常量字符串等。常量字符串将在data段生成形如\_1sc : .asciiz "please input ten int number for bubble sort:$\backslash$n"的数据。
+
+##### Lab 8 二元表达式
+
+在Lab 7中的二元表达式支持的运算符较少，无法满足本次实验要求。因此我扩充了二元表达式支持的运算符，例如"+=""-=""*=""/-"等。对于"+="运算符，生成的四元式opnd1和res均为BinaryExpression.expr1，opnd2为BinaryExpression.expr2。"s+=i；"语句生成等价的"(+=,s,i,s)"。对于"++"运算符，将在目标代码生成的过程中进一步处理。
+
+若二元表达式的expr1类型为ASTArrayAccess，且符号为"="，此时为数组元素赋值，使用"[]="符号生成对应的四元式。
+
+##### Lab 8 函数调用
+
+由于Lab 8 的测试用例中含有Mars\_PrintStr、Mars\_PrintInt、Mars\_GetInt函数，需要对函数调用语句进行处理，分为系统函数和自定义的函数两类。若函数为Mars\_PrintStr，将字符串设置为StringConstant类型，存入全局符号表中。对于其他函数，若参数为二元表达式，在目标代码生成时将二元表达式计算结果寄存器压入栈中，函数调用时再出栈。
+
+##### Lab 8 break语句
+
+break语句位于循环的stat结构中，出现break语句只能跳出本层循环。使用endloop\_count变量维护循环层数。在进入iterationStat.stat前endloop\_count加1，退出iterationStat.stat后减一。出现break语句时跳转至当前endloop\_count数值的end\-loop标识符处。这样可以保证只能跳出本层循环。
+
+```
+endloop_count++;
+visit(iterationStat.stat);
+endloop_count--;
+```
+
+#### Lab 8 生成data段
+
+遍历全局符号表，查询类型为"StringConstant"的元素。这些字符串是后续Mars\_PrintStr函数的参数，为其在data段生成字符串数据。关键代码如下所示。
+
+```
+code.add(".data");
+code.add("blank : .asciiz \" \"");
+int string_tmp = 1;
+for(int i=1;i<global_table.size();i++){
+ for(int j=1;j<global_table.get(i).size();j++){
+  if(global_table.get(i).get(j).Kind.equals("StringConstant")){
+   code.add("_"+string_tmp+"sc : .asciiz "+global_table.get(i).get(j).Name);
+   dataItemList.add(new DataSegItem("_"+string_tmp+"sc",global_table.get(i).get(j).Name));
+   string_tmp +=1;
+  }
+ }
+}
+```
+
+#### Lab 8 寄存器分配
+
+由于修改中间代码生成模块消耗了较多的时间，本次实验我选择使用循环分配寄存器的方式进行。扫描全局符号表，为VariableDeclarator类型的变量分配寄存器。在MIPS中16-23为子程序寄存器，为变量分配这个区间的寄存器。MIPS中24-25为临时变量，子程序使用无需保存。
+
+```
+for(int i=1;i<global_table.size();i++){
+ for(int j=1;j<global_table.get(i).size();j++){
+  SymbolTable item= global_table.get(i).get(j);
+  if(item.Kind.equals("VariableDeclarator")){
+   addvalue(regcount,item.Name,global_table.get(i).get(0).Name);
+   regcount = renew(regcount);
+  }
+ }
+}
+```
+
+#### Lab 8 比较运算
+
+对于符号为"<""<="的四元式，使用MIPS中的slt语句进行处理。首先判断四元式中的运算数类型，若为立即数，则生成li语句，将立即数加载到寄存器中；若为"\%"开头的临时变量，则从栈中弹出寄存器的符号；若为标识符，则查询标识符对应的寄存器。生成slt语句，格式为slt rd，rs，rt (rd ←（rs<rt）)。将结果寄存器压入栈中，便于后续的处理。若运算符为"<="，则需要将opnd2的立即数+1，转换为等价的"<"运算符。
+
+关键代码如下所示。
+
+```
+//立即数
+if(isimm(str_a[2])){
+ if(str_a[0].equals("<")){
+  //将数值加载到寄存器
+  int imm = Integer.parseInt((str_a[2]));
+  tmp = "li $"+regcount+", "+imm;
+ }
+ else {
+  //<=需要+1
+  int imm = Integer.parseInt((str_a[2]));
+  imm +=1;
+  tmp = "li $" + regcount + ", " + imm;
+ }
+ tmp_reg1="$"+regcount;
+ regcount = renew(regcount);
+ this_code.add("\t"+tmp);
+}
+else if(str_a[2].charAt(0) == '%'){
+ tmp_reg1 = regstack.pop();
+}
+//寄存器
+else {
+ tmp_reg1 = get(str_a[2]);
+}
+```
+
+#### Lab 8 相等比较
+
+对于"=="运算符，操作方法和比较运算类似。检查运算符的类型，判断是立即数、临时变量还是标识符。若为寄存器则出栈，若为立即数则将立即数存入寄存器中，若为标识符则查询存储的寄存器。使用sub指令相减，根据结果是否为0判断数据是否相等。将结果入栈，方便后续判断。
+
+```
+String aim_reg = "$"+regcount;
+//sub rd，rs，rt; rd ← rs-rt
+this_code.add("\tsub "+aim_reg+", "+tmp_reg1+", "+tmp_reg2);
+regstack.push(aim_reg);
+regcount = renew(regcount);
+```
+
+#### Lab 8 条件跳转
+
+使用bne指令进行条件跳转。栈顶元素出栈，判断栈顶是否为0，跳转到相应的标号。
+
+```
+else if(str_a[0].equals("Jt")){
+ String tmp = "";
+ tmp+= ("bne "+regstack.pop()+", $0, "+getSegflag(str_a[3]));
+ this_code.add("\t"+tmp);
+}
+```
+
+#### Lab 8 函数调用
+
+判断函数是否为Mars\_PrintStr、Mars\_PrintInt、Mars\_GetInt等系统函数还是自定义的函数。Mars\_PrintStr函数需要打印字符串，在dataItemList中根据四元式中的字符串查询变量名，使用la指令加载字符串地址。将参数传入\$4寄存器中，调用jal指令进行跳转。对于Mars\_GetInt函数无需传参，对于Mars\_PrintInt函数，判断参数是立即数还是标识符，将其存入\$4寄存器，调用jal指令进行跳转。
+
+对于自定义的函数，在全局符号表中查询函数参数个数，从堆栈中出栈，存入\$a0 - \$a3寄存器中，如果有更多的参数，或者有传值的结构，其将被保存在栈中。子程序结束后，返回值要保存在\$v0-\$v1中。
+
+```
+for(int j=0;j<global_table.get(0).size();j++){
+ if(global_table.get(0).get(j).params.size()==1){
+  back_reg = regcount;
+  regcount = renew(regcount);
+  
+  for(int k=1;k<global_table.size();k++){
+   if(global_table.get(k).get(0).Name.equals(str_a[1])){
+    para_name = global_table.get(k).get(1).Name;
+   }
+  }
+  
+  this_code.add("\tsw "+get(para_name)+", -4($fp)");
+  this_code.add("\tsubu $sp, $sp, 4");
+  this_code.add("\tsw $fp, ($sp)");
+  this_code.add("\tmove $fp, $sp");
+  this_code.add("\tsw $31, 20($sp)");
+  //参数超过4个保存在栈中
+  if(str_a.length<3){
+   this_code.add( "\tmove $4, "+regstack.pop());//传入函数参数
+  }else{
+   this_code.add( "\tmove $4, "+get(str_a[2]));
+  }
+ }
+}
+```
+
+#### Lab 8 返回语句
+
+对于返回语句，判断返回值是否为立即数还是标识符。若为寄存器使用li指令将其存入寄存器中，再使用move指令存入\$2寄存器中；否则将标识符所在寄存器存入\$2寄存器。
+
+```
+if(isimm){
+ this_code.add("\tli $"+tmpregcount+", "+str_a[1]);
+ this_code.add("\tmove $2, $"+tmpregcount);
+ this_code.add("\tmove $sp, $fp");
+ this_code.add("\tjr $31");
+ tmpregcount=renew_tmp(tmpregcount);
+}
+else{
+ this_code.add("\tmove $2, "+get(str_a[1]));
+ this_code.add("\tmove $sp, $fp");
+ this_code.add("\tjr $31");
+}
+```
+
+#### Lab 8 二元运算
+
+对于"+""-""*""-""/""\%"等运算，目标代码生成方式类似，使用add、sub、mul、div、rem指令。先判断操作数是否为立即数，若为立即数使用li指令存入寄存器中；若为临时变量从堆栈中弹出寄存器符号；若为标识符则查询存储的位置。对于"-""/""\%"等具有先后顺序的运算，由于出栈顺序和指令中的顺序不一致，需要将除数与被除数出栈后逆序拼接。
+
+```
+if(isimm){
+ this_code.add("\tli $"+regcount+", "+str_a[j]);
+ //将立即数存入寄存器
+ regstack.push("$"+regcount);
+ regcount = renew(regcount);
+}
+else if(str_a[j].charAt(0)=='%'){
+ continue;
+}
+else{
+ regstack.push(get(str_a[j]));
+ this_code.add("\tsw "+get(str_a[j])+", -4($fp)");
+}
+```
+
+#### Lab 8 自增自减运算
+
+对于自增自减运算，使用addi \$i,\$i,1指令和subi \$i,\$i,1指令进行处理。
+
+```
+else if(str_a[0] .equals( "++")){
+ regstack.push(get(str_a[1]));
+ this_code.add("\taddi "+get(str_a[1])+", "+get(str_a[1])+", 1");
+}
+```
+
+#### Lab 8 赋值运算
+
+对于复合赋值运算符，如"-="，使用sub指令进行处理。对于赋值语句，若没有操作数，则从堆栈中出栈；若有操作数则判断是否为立即数、临时变量还是标识符。
+
+```
+else if(str_a[0] .equals( "=")){
+ String tmp = "";
+ //赋值语句没有操作数，出栈
+ if(str_a[1].equals("")){
+  if(regstack.size()>0)
+  tmp +="move "+get(str_a[3])+", "+regstack.pop();
+  //tmp +="move "+get(str_a[3])+", "+"$"+(regcount+1);
+  this_code.add("\t"+tmp);
+ }else if(isimm(str_a[1])){
+  if(str_a[3].charAt(0)=='%') {
+   String tmpreg = regstack.pop();
+   tmp += "li " + tmpreg + ", " + str_a[1];
+   regstack.push(tmpreg);
+  }
+  else
+  tmp +="li "+get(str_a[3])+", "+str_a[1];
+  this_code.add("\t"+tmp);
+ }
+ else{
+  if(str_a[3].charAt(0)=='%') {
+   String tmpreg = regstack.pop();
+   tmp += "move " + tmpreg + ", " + get(str_a[1]);
+   regstack.push(tmpreg);
+  }
+  else
+  tmp +="move "+get(str_a[3])+", "+get(str_a[1]);
+  this_code.add("\t"+tmp);
+ }
+}
+```
+
+#### Lab 8 数组访问
+
+数组访问分为数组元素赋值和数组元素引用两类。对于数组元素引用"=[]"运算符，四元式为(=[],偏移量变量,数组符号,目标变量)；对于数组元素赋值"[]="运算符，四元式为([]=,变量,偏移量,数组符号)。判断操作数是否为立即数、临时变量还是标识符，操作方法和上面类似。
+
+```
+this_code.add("\tli $"+tmpregcount+", 4");
+tmp_reg1 = tmpregcount;
+tmpregcount = renew_tmp(tmpregcount);
+this_code.add("\tmul $"+tmp_regoff+", $"+tmp_regoff+", $"+tmp_reg1);
+this_code.add("\tsub $"+tmp_reg1+", $sp, $"+tmp_regoff);
+//offset为数组偏移量
+this_code.add("\tla $"+regcount+", "+str_a[2]);
+this_code.add("\tadd $"+tmp_reg1+", $"+tmp_reg1+", $"+regcount);
+regcount = renew(regcount);
+this_code.add("\tlw $"+tmp_regoff   +", ($24)");
+```
